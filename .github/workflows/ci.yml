@@ -1,0 +1,193 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1" # weekly, for the Hub tests
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_PYTHON_DOWNLOADS: never
+  HF_HUB_DISABLE_TELEMETRY: "1"
+
+jobs:
+  lint:
+    name: lint / ruff, format, pyright
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Install uv from a hash-pinned file
+        run: python -m pip install --require-hashes -r .github/requirements/uv.txt
+      - name: Create the locked environment
+        run: uv sync --locked --group dev
+      - name: Ruff lint
+        run: uv run --no-sync ruff check .
+      - name: Ruff format
+        run: uv run --no-sync ruff format --check .
+      - name: pyright
+        run: uv run --no-sync pyright
+
+  test:
+    name: test / ${{ matrix.os }} / py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install uv from a hash-pinned file
+        run: python -m pip install --require-hashes -r .github/requirements/uv.txt
+      - name: Create the locked environment
+        run: uv sync --locked --group test
+      - name: Tests
+        run: uv run --no-sync pytest --timeout=300
+      - name: CLI smoke test
+        shell: bash
+        run: |
+          uv run --no-sync tailtune doctor
+          uv run --no-sync tailtune estimate tests/fixtures/configs/Qwen_Qwen3-8B.json --gpu T4
+
+  # The import-hygiene tests only mean something when torch is installed.
+  test-torch:
+    name: test / ubuntu / py${{ matrix.python }} / torch ${{ matrix.torch }} (CPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+        torch: ["2.14", "2.15"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install uv from a hash-pinned file
+        run: python -m pip install --require-hashes -r .github/requirements/uv.txt
+      - name: Create the locked environment
+        run: uv sync --locked --group test
+      - name: Add CPU torch for this leg
+        run: uv pip install "torch~=${{ matrix.torch }}.0" --torch-backend=cpu
+      - name: Tests
+        run: uv run --no-sync pytest --timeout=300
+      - name: doctor with torch, including the 2-rank gloo check
+        run: uv run --no-sync tailtune doctor --deep
+
+  # Floors are the oldest versions CI has tested (11-engineering-and-release.md section 2).
+  test-floors:
+    name: test / ubuntu / py3.11 / lowest allowed dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Install uv from a hash-pinned file
+        run: python -m pip install --require-hashes -r .github/requirements/uv.txt
+      - name: Install the lowest versions pyproject.toml allows
+        run: |
+          uv venv
+          uv pip install --resolution lowest-direct -e . "pytest>=8" "pytest-timeout>=2.3"
+      - name: Tests
+        run: uv run --no-sync pytest --timeout=300
+
+  build:
+    name: build / sdist and wheel
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Install uv from a hash-pinned file
+        run: python -m pip install --require-hashes -r .github/requirements/uv.txt
+      - name: Build
+        run: uv build
+      - name: Wheel is pure Python
+        run: |
+          ls dist/
+          test "$(ls dist/*.whl | wc -l)" -eq 1
+          ls dist/*-py3-none-any.whl
+      - name: Smoke test the built wheel in a clean environment
+        run: |
+          uv venv "$RUNNER_TEMP/smoke"
+          uv pip install --python "$RUNNER_TEMP/smoke" dist/*.whl
+          "$RUNNER_TEMP/smoke/bin/tailtune" --version
+          "$RUNNER_TEMP/smoke/bin/tailtune" doctor
+          "$RUNNER_TEMP/smoke/bin/tailtune" estimate tests/fixtures/configs/Qwen_Qwen3-0.6B.json --gpu T4
+
+  dco:
+    name: dco / Signed-off-by on every commit
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Check sign-off
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          missing=0
+          for c in $(git rev-list --no-merges "$BASE..$HEAD"); do
+            if ! git log -1 --format=%B "$c" | grep -qE '^Signed-off-by: .+ <.+>$'; then
+              echo "::error::Commit $c has no Signed-off-by line. Use git commit -s (see CONTRIBUTING.md)."
+              missing=1
+            fi
+          done
+          exit $missing
+
+  network:
+    name: network / config arithmetic against Hub headers
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install uv from a hash-pinned file
+        run: python -m pip install --require-hashes -r .github/requirements/uv.txt
+      - name: Create the locked environment
+        run: uv sync --locked --group test
+      - name: Hub tests
+        run: uv run --no-sync pytest -m network --timeout=600
+      - name: Release smoke model
+        run: uv run --no-sync tailtune estimate Qwen/Qwen3-0.6B --gpu T4

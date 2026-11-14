@@ -1,0 +1,97 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "tailtune"
+dynamic = ["version"]
+description = "Fine-tune LLMs with far less forgetting, and prove it."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.11"
+authors = [{ name = "tailtune maintainers" }]
+keywords = ["fine-tuning", "llm", "catastrophic-forgetting", "lora", "gpu", "memory-estimate"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Typing :: Typed",
+]
+# 0.0.1 ships only `doctor` and `estimate`. torch, Transformers, TRL and PEFT are
+# probed when present, never required. The full dependency list arrives at v0.1.
+dependencies = [
+  "huggingface-hub>=1.0,<3",
+  "packaging>=24",
+  "psutil>=6",
+  "typer>=0.24,<1",
+]
+
+[project.scripts]
+tailtune = "tailtune.cli:main"
+
+[project.urls]
+Source = "https://github.com/inboxpraveen/tailtune"
+Issues = "https://github.com/inboxpraveen/tailtune/issues"
+Changelog = "https://github.com/inboxpraveen/tailtune/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+test = ["pytest>=8", "pytest-timeout>=2.3"]
+lint = ["ruff>=0.15", "pyright>=1.1.400"]
+dev = [{ include-group = "test" }, { include-group = "lint" }]
+
+[tool.hatch.version]
+path = "src/tailtune/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/tailtune"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/tests", "/LICENSE", "/NOTICE", "/README.md", "/CHANGELOG.md"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+extend-exclude = ["research_notes", "reports", "docs"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["tailtune", "conftest"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "PT", "C4", "SIM", "RUF", "TID"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S106", "S603"]
+
+# Enforce safetensors-only and safe YAML inside our own code (D-08).
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"torch.load".msg = "Pickle checkpoints are refused. Use safetensors (SECURITY.md)."
+"pickle".msg = "No pickle anywhere in tailtune. Use safetensors, Parquet or JSON."
+"yaml.load".msg = "Use yaml.safe_load."
+
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.11"
+typeCheckingMode = "standard"
+reportMissingTypeStubs = false
+reportMissingImports = "warning"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers -m 'not gpu and not network and not slow'"
+markers = [
+  "gpu: needs a CUDA device",
+  "network: needs the Hugging Face Hub",
+  "slow: over 60 s on a CPU runner",
+  "distributed: spawns 2 gloo ranks",
+  "quarantine: known flaky, tracked in a linked issue",
+]
+filterwarnings = ["error::tailtune.TailtuneDeprecationWarning"]

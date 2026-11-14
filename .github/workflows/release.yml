@@ -1,0 +1,70 @@
+name: release
+
+# Publishes to PyPI through Trusted Publishing. One-time setup, before the first tag:
+#   1. GitHub: create the `pypi` environment, add a required reviewer, and limit
+#      deployments to tags matching v*.
+#   2. PyPI: add a pending publisher for project `tailtune` with this repository,
+#      workflow `release.yml` and environment `pypi`.
+# No PyPI token is used or stored anywhere.
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: read
+
+env:
+  UV_PYTHON_DOWNLOADS: never
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Install uv from a hash-pinned file
+        run: python -m pip install --require-hashes -r .github/requirements/uv.txt
+      - name: Build sdist and wheel
+        run: uv build
+      - name: Wheel is pure and matches the tag
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          ls dist/
+          test -f "dist/tailtune-${v}-py3-none-any.whl"
+          test -f "dist/tailtune-${v}.tar.gz"
+          test "$(ls dist | wc -l)" -eq 2
+      - name: Smoke test the built wheel
+        run: |
+          uv venv "$RUNNER_TEMP/smoke"
+          uv pip install --python "$RUNNER_TEMP/smoke" dist/*.whl
+          "$RUNNER_TEMP/smoke/bin/tailtune" --version
+          "$RUNNER_TEMP/smoke/bin/tailtune" doctor
+          "$RUNNER_TEMP/smoke/bin/tailtune" estimate tests/fixtures/configs/Qwen_Qwen3-0.6B.json --gpu T4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi # required reviewer; deployments limited to v* tags
+      url: https://pypi.org/project/tailtune/
+    permissions:
+      id-token: write # Trusted Publishing. No other job has this.
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        # Attestations are generated and uploaded by default.

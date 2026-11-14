@@ -1,0 +1,7 @@
+# Every change needs a maintainer review. Per-area owners are added as maintainers join.
+*               @inboxpraveen
+
+# Workflows, release and security policy always need a maintainer.
+/.github/       @inboxpraveen
+/SECURITY.md    @inboxpraveen
+/pyproject.toml @inboxpraveen

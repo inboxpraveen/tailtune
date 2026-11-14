@@ -1,0 +1,21 @@
+name: Model support
+description: Ask for an architecture that `tailtune estimate` refuses (TT-T004).
+labels: [model-support]
+body:
+  - type: input
+    id: model
+    attributes:
+      label: Hugging Face model id
+      placeholder: org/model-name
+    validations:
+      required: true
+  - type: input
+    id: model_type
+    attributes:
+      label: model_type from its config.json
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What you want to do with it
