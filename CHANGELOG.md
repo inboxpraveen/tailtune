@@ -6,6 +6,12 @@ after a deprecation period.
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.0.1 (2026-11-14)
+
+First release: two hardware commands, no training yet.
+
 ### Added
 
 - `tailtune doctor`: checks D01 to D18 from the plan (Python, platform, hosted

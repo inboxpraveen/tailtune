@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 from tailtune._core.errors import TailtuneDeprecationWarning, TailtuneError
 
-__version__ = "0.0.1.dev0"
+__version__ = "0.0.1"
 
 if TYPE_CHECKING:
     from tailtune.hardware.doctor import DoctorReport
