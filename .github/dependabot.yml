@@ -1,0 +1,36 @@
+version: 2
+updates:
+  # Keeps the SHA pins in .github/workflows current, with their version comments.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    cooldown:
+      default-days: 14
+
+  # uv.lock. transformers, trl and peft are owned by the compatibility job, so their
+  # caps move only on a green test run (11-engineering-and-release.md section 7).
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      python:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: transformers
+      - dependency-name: trl
+      - dependency-name: peft
+    cooldown:
+      default-days: 14
+
+  # The hash-pinned uv used to bootstrap CI.
+  - package-ecosystem: pip
+    directory: /.github/requirements
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14

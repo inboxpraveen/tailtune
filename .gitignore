@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Environments
+.venv/
+venv/
+.env
+
+# Tools
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.coverage
+htmlcov/
+
+# tailtune run output and caches
+runs/
+.tailtune/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

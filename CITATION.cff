@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you use tailtune, please cite it using these metadata."
+title: "tailtune: fine-tune LLMs with far less forgetting, and prove it"
+type: software
+authors:
+  - given-names: Praveen
+    family-names: Kumar
+license: Apache-2.0
+repository-code: "https://github.com/inboxpraveen/tailtune"
+keywords:
+  - fine-tuning
+  - large language models
+  - catastrophic forgetting
+  - memory estimation
